@@ -371,7 +371,9 @@
     .insight-tile strong { display:block; font-size:18px; margin-top:5px; overflow-wrap:anywhere; }
     .insight-tile small { color:var(--text-muted); }
     @media(max-width:650px) { .insight-grid { grid-template-columns:1fr; } .studio-controls select { max-width:100%; width:100%; } }
-  </style>
+    #finny-panel[hidden]{display:none!important}
+  @media(max-width:600px){#finny-open{right:12px;bottom:12px}#finny-panel{right:10px!important;bottom:68px!important}}
+</style>
 </head>
 <body data-theme="light">
   <!-- PIN Screen -->
@@ -408,6 +410,7 @@
       <button type="button" class="nav-btn" data-view="reports"><span class="nav-icon">📑</span><span class="nav-label">Reports</span></button>
       <button type="button" class="nav-btn" data-view="budgets"><span class="nav-icon">🎯</span><span class="nav-label">Budgets</span></button>
       <button type="button" class="nav-btn" data-view="goals"><span class="nav-icon">🏆</span><span class="nav-label">Savings Goals</span></button>
+      <button type="button" class="nav-btn" data-view="smart-planner"><span class="nav-icon">🧠</span><span class="nav-label">Smart Goal Planner</span></button>
       <button type="button" class="nav-btn" data-view="categories"><span class="nav-icon">🏷️</span><span class="nav-label">Categories</span></button>
       <button type="button" class="nav-btn" data-view="recurring"><span class="nav-icon">🔁</span><span class="nav-label">Recurring</span></button>
       <button type="button" class="nav-btn" data-view="subscriptions"><span class="nav-icon">🔔</span><span class="nav-label">Subscriptions</span></button>
@@ -716,6 +719,27 @@
           <div class="grid-2" id="goals-cards"></div>
         </section>
 
+        <!-- SMART GOAL PLANNER -->
+        <section class="view-panel" id="view-smart-planner">
+          <div class="card">
+            <div class="card-header"><span class="card-title">Smart Goal Planner</span><span class="badge">Local-first</span></div>
+            <p style="color:var(--text-muted);font-size:13px;margin:0 0 14px;">Plan contributions, compare timelines and track deposits. Forecasts are estimates, not guaranteed returns.</p>
+            <div class="form-grid">
+              <div><label for="sp-goal">Choose goal</label><select id="sp-goal"></select></div>
+              <div><label for="sp-contribution">Add contribution (₹)</label><input type="number" id="sp-contribution" min="1" placeholder="e.g. 500" /></div>
+              <div><label for="sp-account">Where did you add it?</label><select id="sp-account"><option>Cash savings</option><option>Bank savings</option><option>FD</option><option>Mutual fund / SIP</option><option>Stocks (tracking only)</option><option>Other</option></select></div>
+              <div><label for="sp-note">Note (optional)</label><input id="sp-note" placeholder="Monthly saving, deposit..." /></div>
+              <div class="full-span"><button class="btn btn-primary" id="sp-add" type="button">＋ Record contribution</button></div>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="card"><div class="card-header"><span class="card-title">Your cash flow snapshot</span></div><div id="sp-cashflow"></div></div>
+            <div class="card"><div class="card-header"><span class="card-title">Suggested monthly saving</span></div><div id="sp-suggestion"></div></div>
+          </div>
+          <div class="card"><div class="card-header"><span class="card-title">Goal timeline &amp; scenarios</span></div><div id="sp-analysis"></div></div>
+          <div class="card"><div class="card-header"><span class="card-title">Contribution history</span></div><div id="sp-history"></div></div>
+        </section>
+
         <!-- 11. CATEGORIES -->
         <section class="view-panel" id="view-categories">
           <div class="card">
@@ -928,6 +952,13 @@
     </div>
   </div>
 
+  <button type="button" class="btn btn-primary" id="finny-open" style="position:fixed;right:20px;bottom:20px;z-index:90;border-radius:28px;box-shadow:var(--shadow);">✦ Ask Finny</button>
+  <div class="card" id="finny-panel" hidden style="position:fixed;right:18px;bottom:76px;width:min(380px,calc(100vw - 36px));max-height:70vh;overflow:auto;z-index:91;box-shadow:0 12px 40px #0003;">
+    <div class="card-header"><span class="card-title">✦ Finny — Money Assistant</span><button type="button" class="btn btn-secondary btn-sm" id="finny-close">✕</button></div>
+    <p style="font-size:12px;color:var(--text-muted);">Finny currently uses on-device analysis of your saved transactions. Live AI replies require a secure backend connection, which is not configured in this GitHub-only version.</p>
+    <div id="finny-answer" style="font-size:13px;line-height:1.55;margin:10px 0;">Ask about spending, budgets or saving goals.</div>
+    <div style="display:flex;gap:6px;"><input id="finny-question" placeholder="e.g. How can I save more?" style="min-width:0;flex:1;"><button type="button" class="btn btn-primary" id="finny-ask">Ask</button></div>
+  </div>
   <div class="toast-container" id="toasts"></div>
 
   <script>
@@ -953,6 +984,7 @@
         customIncCats: [],
         budgets: { daily: 1000, weekly: 5000, monthly: 20000, categories: {} },
         goals: [],
+        goalContributions: [],
         recurring: [],
         subscriptions: [],
         templates: [],
@@ -974,7 +1006,8 @@
           customExpCats: Array.isArray(p.customExpCats) ? p.customExpCats : (Array.isArray(p.customCategories) ? p.customCategories : []),
           customIncCats: Array.isArray(p.customIncCats) ? p.customIncCats : [],
           budgets: Object.assign(d.budgets, p.budgets || {}),
-          goals: Array.isArray(p.goals) ? p.goals : [],
+          goals: Array.isArray(p.goals) ? p.goals.map(function(g){ return Object.assign({ contributions: [] }, g); }) : [],
+          goalContributions: Array.isArray(p.goalContributions) ? p.goalContributions : [],
           recurring: Array.isArray(p.recurring) ? p.recurring : [],
           subscriptions: Array.isArray(p.subscriptions) ? p.subscriptions : [],
           templates: Array.isArray(p.templates) ? p.templates : [],
@@ -1801,6 +1834,56 @@
       saveData(); document.getElementById('g-name').value = ''; document.getElementById('g-target').value = ''; renderAll(); toast('Goal created', 'success');
     });
 
+    function renderSmartPlanner() {
+      const sel = document.getElementById('sp-goal');
+      if (!sel) return;
+      const previous = sel.value;
+      sel.innerHTML = state.goals.length ? state.goals.map(function(g){return '<option value="'+esc(String(g.id))+'">'+esc(g.name)+'</option>';}).join('') : '<option value="">Create a savings goal first</option>';
+      if (state.goals.some(function(g){return String(g.id)===previous;})) sel.value=previous;
+      const month = new Date().toISOString().slice(0,7);
+      const income = state.transactions.filter(function(t){return t.type==='income' && String(t.date||'').startsWith(month);}).reduce(function(a,t){return a+(Number(t.amount)||0);},0);
+      const expenses = state.transactions.filter(function(t){return t.type==='expense' && String(t.date||'').startsWith(month);}).reduce(function(a,t){return a+(Number(t.amount)||0);},0);
+      const surplus = income-expenses;
+      document.getElementById('sp-cashflow').innerHTML='<div style="display:flex;justify-content:space-between;gap:8px"><span>Income this month</span><b>'+fmtMoney(income)+'</b></div><div style="display:flex;justify-content:space-between;gap:8px"><span>Expenses this month</span><b>'+fmtMoney(expenses)+'</b></div><hr><div style="display:flex;justify-content:space-between;gap:8px"><span>Difference</span><b style="color:'+(surplus>=0?'var(--success)':'var(--danger)')+'">'+fmtMoney(surplus)+'</b></div><small style="color:var(--text-muted)">Based only on transactions entered for this calendar month.</small>';
+      const safeSave = Math.max(0, Math.round(surplus*0.2));
+      document.getElementById('sp-suggestion').innerHTML='<div style="font-size:26px;font-weight:800;color:var(--success)">'+fmtMoney(safeSave)+'</div><p style="font-size:12px;color:var(--text-muted)">Illustrative monthly saving amount (20% of positive recorded surplus). Adjust it to what is genuinely affordable; keep essential expenses first.</p>';
+      const g = state.goals.find(function(x){return String(x.id)===sel.value;});
+      const analysis=document.getElementById('sp-analysis');
+      if(!g){analysis.innerHTML='<div class="empty-state">Create a goal in Savings Goals to see its plan.</div>';}
+      else {
+        const saved=Number(g.saved)||0, remaining=Math.max(0,(Number(g.target)||0)-saved), monthly=Math.max(0,safeSave);
+        const months=monthly>0?Math.ceil(remaining/monthly):null;
+        const due=g.date?new Date(g.date+'T12:00:00'):null;
+        const days=due?Math.max(0,Math.ceil((due-new Date())/86400000)):null;
+        const pct=g.target>0?Math.min(100,Math.round(saved/g.target*100)):0;
+        analysis.innerHTML='<div style="display:flex;justify-content:space-between"><b>'+esc(g.name)+'</b><b>'+pct+'%</b></div><div class="progress-track"><div class="progress-fill" style="width:'+pct+'%"></div></div><p>'+fmtMoney(saved)+' saved · '+fmtMoney(remaining)+' remaining of '+fmtMoney(g.target)+'</p><div class="grid-2"><div class="card" style="background:var(--bg-surface)"><small>At suggested pace</small><h3>'+(months===null?'Add a saving amount':months+' months')+'</h3></div><div class="card" style="background:var(--bg-surface)"><small>Target date</small><h3>'+(days===null?'Not set':fmtDate(g.date))+'</h3></div></div><small style="color:var(--text-muted)">Simple contribution-only estimate; excludes interest, market returns, taxes and fees. Investment values can fall as well as rise.</small>';
+      }
+      const rows=(state.goalContributions||[]).filter(function(c){return !sel.value || String(c.goalId)===sel.value;}).slice().reverse();
+      document.getElementById('sp-history').innerHTML=rows.length?'<div class="table-wrap"><table><thead><tr><th>Date</th><th>Goal</th><th>Destination</th><th>Amount</th><th>Note</th></tr></thead><tbody>'+rows.map(function(c){return '<tr><td>'+esc(c.date)+'</td><td>'+esc(c.goalName)+'</td><td>'+esc(c.account)+'</td><td>'+fmtMoney(c.amount)+'</td><td>'+esc(c.note||'—')+'</td></tr>';}).join('')+'</tbody></table></div>':'<div class="empty-state">No contributions recorded yet.</div>';
+    }
+    document.getElementById('sp-goal').addEventListener('change',renderSmartPlanner);
+    document.getElementById('sp-add').addEventListener('click',function(){
+      const id=document.getElementById('sp-goal').value, amount=Number(document.getElementById('sp-contribution').value), g=state.goals.find(function(x){return String(x.id)===id;});
+      if(!g){toast('Create or select a goal first','warning');return;} if(!Number.isFinite(amount)||amount<=0){toast('Enter a valid contribution','warning');return;}
+      g.saved=(Number(g.saved)||0)+amount; const item={id:Date.now(),goalId:g.id,goalName:g.name,amount:amount,account:document.getElementById('sp-account').value,note:document.getElementById('sp-note').value.trim(),date:todayStr()};
+      state.goalContributions=state.goalContributions||[];state.goalContributions.push(item);g.contributions=g.contributions||[];g.contributions.push(item);saveData();document.getElementById('sp-contribution').value='';document.getElementById('sp-note').value='';renderAll();renderSmartPlanner();toast('Contribution recorded','success');
+    });
+    function finnyReply(q){
+      const textq=q.toLowerCase(); const month=new Date().toISOString().slice(0,7);
+      const inc=state.transactions.filter(function(t){return t.type==='income'&&String(t.date||'').startsWith(month);}).reduce(function(a,t){return a+(Number(t.amount)||0);},0);
+      const exp=state.transactions.filter(function(t){return t.type==='expense'&&String(t.date||'').startsWith(month);}).reduce(function(a,t){return a+(Number(t.amount)||0);},0);
+      const byCat={};state.transactions.filter(function(t){return t.type==='expense'&&String(t.date||'').startsWith(month);}).forEach(function(t){byCat[t.category||'Other']=(byCat[t.category||'Other']||0)+(Number(t.amount)||0);});
+      const top=Object.keys(byCat).sort(function(a,b){return byCat[b]-byCat[a];})[0];
+      if(/goal|save|saving|target/.test(textq)){return 'You have '+state.goals.length+' saved goal(s). This month, recorded income is '+fmtMoney(inc)+' and expenses are '+fmtMoney(exp)+'. Your recorded difference is '+fmtMoney(inc-exp)+'. Open Smart Goal Planner to see a contribution-only timeline and record deposits. Start with an amount that does not affect essentials.';}
+      if(/expense|spend|where|category/.test(textq)){return 'This month: income '+fmtMoney(inc)+', expenses '+fmtMoney(exp)+'. '+(top?'Your highest recorded expense category is '+top+' ('+fmtMoney(byCat[top])+').':'No expense categories recorded this month.')+' Review the transactions in that category and decide which optional costs can be reduced.';}
+      if(/budget|plan/.test(textq)){return 'Your recorded monthly income is '+fmtMoney(inc)+' and expenses are '+fmtMoney(exp)+'. Difference: '+fmtMoney(inc-exp)+'. Set realistic limits in Budgets, prioritise needs, and review the plan weekly.';}
+      return 'I can summarise your recorded income and expenses, find your largest expense category, and guide you to the Smart Goal Planner. Try asking “How can I save more?”, “Where am I spending most?” or “Help with my goal”. This version uses local rules, not a live AI model.';
+    }
+    document.getElementById('finny-open').addEventListener('click',function(){document.getElementById('finny-panel').hidden=false;});
+    document.getElementById('finny-close').addEventListener('click',function(){document.getElementById('finny-panel').hidden=true;});
+    document.getElementById('finny-ask').addEventListener('click',function(){const q=document.getElementById('finny-question').value.trim();if(!q)return;document.getElementById('finny-answer').textContent=finnyReply(q);});
+    document.getElementById('finny-question').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('finny-ask').click();});
+
     function renderCategories() {
       document.getElementById('cat-exp-list').innerHTML = expCats().map(function (c) { return '<span class="badge">' + esc(c) + '</span>'; }).join('');
       document.getElementById('cat-inc-list').innerHTML = incCats().map(function (c) { return '<span class="badge income">' + esc(c) + '</span>'; }).join('');
@@ -2026,6 +2109,7 @@
       renderReports();
       renderBudgets();
       renderGoals();
+      renderSmartPlanner();
       renderCategories();
       renderRecurring();
       renderSubscriptions();
